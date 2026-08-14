@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF 投資互動指南 & 策略探索工具</title>
+    <!-- Chosen Palette: Warm Sand & Slate Blue -->
+    <!-- Application Structure Plan: 
+        本 SPA 旨在將《ETF 入門指南》報告內容進行重組與升級，提供非線性的互動體驗。
+        1. 頂部導覽列：快速切換五大核心模組（核心概念、工具三方PK、5大類型與配置、智慧計算機、互動測驗）。
+        2. 儀表板總覽與比喻卡片：透過互動翻牌/切換，理解「單點海鮮 vs 綜合海鮮麵」的概念。
+        3. 三大投資工具多維度比對：結合動態雷達圖與切換卡片，全面評估股票、ETF 與共同基金的優劣。
+        4. 五大 ETF 類型與資產配置：提供圖表展示不同風險屬性（保守/穩健/積極）的比例搭配與代表標的篩選。
+        5. 智慧計算機（重點互動）：
+           - 內扣費用長期複利試算器：即時拉動年限與金額，視覺化呈現 ETF 比傳統基金節省的巨大成本。
+           - 折溢價診斷器：輸入市價與淨值，即時獲得買貴或便宜的避險建議。
+        6. ETF 智慧選型微測驗：引導新手找到最適合自己的 ETF 類別。
+    -->
+    <!-- Visualization & Content Choices:
+        - 投資工具 PK -> 雷達圖 (Chart.js / Canvas) -> 呈現五大維度（費用、便利性、分散風險、透明度、報酬潛力） -> 提升比較直觀度。
+        - 內扣費用試算 -> 折線圖 (Chart.js / Canvas) -> 呈現 1~30 年資產累積曲線差異 -> 強調長期內扣費用對資產的侵蝕。
+        - 資產配置組合 -> 環狀圖 (Chart.js / Canvas) -> 呈現不同風險屬性的股債搭配 -> 引導用戶進行配置思考。
+        - 折溢價診斷 -> 互動 JS 計算器 + 狀態指示條 -> 輸入價格即時回饋 -> 增強實用安全性。
+        - 絕無使用 SVG 與 Mermaid.js，全數採用 HTML/CSS/Canvas 實現。
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Canvas/HTML icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sand: {
+                            50: '#fdfbf7',
+                            100: '#f7f3ea',
+                            200: '#efe6d5',
+                            800: '#544733',
+                        },
+                        navy: {
+                            700: '#1d3557',
+                            800: '#0f2537',
+                            900: '#0a192f',
+                        },
+                        teal: {
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        },
+                        amber: {
+                            500: '#f59e0b',
+                            600: '#d97706',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #faf8f5;
+            color: #1e293b;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 580px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 380px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .custom-shadow {
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased leading-relaxed min-h-screen flex flex-col justify-between">
+
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-stone-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-xl shadow-md">
+                    <i class="fa-solid fa-chart-pie"></i>
+                </div>
+                <div>
+                    <span class="font-black text-xl text-navy-800 tracking-tight">ETF 投資互動總覽</span>
+                    <span class="hidden md:inline-block text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full ml-2 font-medium border border-teal-200">新手到進階探索</span>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="hidden lg:flex items-center space-x-1">
+                <button onclick="scrollToSection('concept')" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-teal-600 hover:bg-stone-100 rounded-lg transition">核心概念</button>
+                <button onclick="scrollToSection('compare')" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-teal-600 hover:bg-stone-100 rounded-lg transition">工具 PK</button>
+                <button onclick="scrollToSection('types')" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-teal-600 hover:bg-stone-100 rounded-lg transition">五大類型與配置</button>
+                <button onclick="scrollToSection('calculator')" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-teal-600 hover:bg-stone-100 rounded-lg transition">智慧計算機</button>
+                <button onclick="scrollToSection('quiz')" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-teal-600 hover:bg-stone-100 rounded-lg transition">選型小測驗</button>
+            </nav>
+
+            <button onclick="scrollToSection('calculator')" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow transition flex items-center space-x-1">
+                <i class="fa-solid fa-calculator text-xs"></i>
+                <span>費用試算</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16 flex-grow">
+
+        <!-- Hero Banner Section -->
+        <section class="bg-gradient-to-br from-navy-800 via-navy-700 to-teal-700 rounded-3xl p-8 sm:p-12 text-white relative overflow-hidden shadow-xl">
+            <div class="relative z-10 max-w-3xl space-y-4">
+                <div class="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-amber-400 border border-white/10">
+                    <i class="fa-solid fa-lightbulb"></i>
+                    <span>一分鐘懂 ETF</span>
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-black text-white leading-tight">
+                    買入一張 ETF，<br><span class="text-amber-400">打包一整籃</span> 優質資產
+                </h1>
+                <p class="text-slate-200 text-base sm:text-lg leading-relaxed">
+                    兼具「股票隨時買賣」與「基金分散風險」雙重優勢。本互動平台協助您輕鬆掌握指數追蹤邏輯、比較投資工具差異、精算內扣費用並尋找適合您的配置。
+                </p>
+                <div class="pt-4 flex flex-wrap gap-4">
+                    <button onclick="scrollToSection('concept')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-6 py-3 rounded-xl shadow-lg transition">
+                        展開核心探索 <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </button>
+                    <button onclick="scrollToSection('compare')" class="bg-white/10 hover:bg-white/20 text-white font-semibold px-6 py-3 rounded-xl border border-white/20 transition">
+                        工具比較雷達圖
+                    </button>
+                </div>
+            </div>
+            <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-x-12 translate-y-12">
+                <i class="fa-solid fa-chart-line text-[280px]"></i>
+            </div>
+        </section>
+
+        <!-- Section 1: ETF 核心概念與海鮮麵比喻 -->
+        <section id="concept" class="space-y-6">
+            <div class="border-l-4 border-teal-600 pl-4">
+                <h2 class="text-2xl sm:text-3xl font-black text-navy-800">1. ETF 基本概念與生動比喻</h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">理解 ETF（Exchange-Traded Fund，指數型股票基金）的核心定義與運作邏輯。</p>
+            </div>
+
+            <!-- Concept Switcher Tabs -->
+            <div class="bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-6">
+                <div class="flex flex-wrap gap-3 border-b border-stone-200 pb-4">
+                    <button id="tab-btn-definition" onclick="switchConceptTab('definition')" class="px-4 py-2 rounded-xl font-bold text-sm bg-teal-600 text-white transition shadow-sm">
+                        <i class="fa-solid fa-book-bookmark mr-1"></i> 正式定義與規格
+                    </button>
+                    <button id="tab-btn-analogy" onclick="switchConceptTab('analogy')" class="px-4 py-2 rounded-xl font-bold text-sm bg-stone-100 text-slate-600 hover:bg-stone-200 transition">
+                        <i class="fa-solid fa-utensils mr-1"></i> 形象化比喻：單點 vs 綜合海鮮麵
+                    </button>
+                </div>
+
+                <!-- Tab 1 Content: Formal Definition -->
+                <div id="concept-tab-definition" class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-sand-50 p-5 rounded-xl border border-sand-200 space-y-2">
+                        <div class="text-teal-600 font-bold text-xs uppercase tracking-wider">英文全名</div>
+                        <div class="text-lg font-black text-navy-800">Exchange-Traded Fund</div>
+                        <p class="text-xs text-slate-600">交易所交易基金，意指能直接在證券交易所公開申購與買賣的基金。</p>
+                    </div>
+                    <div class="bg-sand-50 p-5 rounded-xl border border-sand-200 space-y-2">
+                        <div class="text-teal-600 font-bold text-xs uppercase tracking-wider">中文名稱</div>
+                        <div class="text-lg font-black text-navy-800">指數型股票基金</div>
+                        <p class="text-xs text-slate-600">追蹤特定指數（如加權指數、標普500）走勢的被動型投資工具。</p>
+                    </div>
+                    <div class="bg-sand-50 p-5 rounded-xl border border-sand-200 space-y-2">
+                        <div class="text-teal-600 font-bold text-xs uppercase tracking-wider">核心定義</div>
+                        <div class="text-lg font-black text-navy-800">兼具股票與基金特性</div>
+                        <p class="text-xs text-slate-600">擁有股票盤中即時交易便利性，同時具備傳統基金一籃子分散風險的效果。</p>
+                    </div>
+                    <div class="bg-sand-50 p-5 rounded-xl border border-sand-200 space-y-2">
+                        <div class="text-teal-600 font-bold text-xs uppercase tracking-wider">一句話形容</div>
+                        <div class="text-lg font-black text-amber-600">一次買進一整籃資產</div>
+                        <p class="text-xs text-slate-600">由專業機構依預先設定好的規則篩選成份股，投資人省去挑股煩惱。</p>
+                    </div>
+                </div>
+
+                <!-- Tab 2 Content: Analogy -->
+                <div id="concept-tab-analogy" class="hidden grid md:grid-cols-2 gap-6">
+                    <div class="bg-stone-50 p-6 rounded-2xl border border-stone-200 space-y-4">
+                        <div class="flex items-center space-x-3 text-red-600">
+                            <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-shrimp"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-navy-800">買單一股票 ＝ 單點海鮮食材</h3>
+                        </div>
+                        <ul class="space-y-3 text-sm text-slate-600">
+                            <li class="flex items-start space-x-2">
+                                <span class="text-red-500 font-bold">▪</span>
+                                <span><strong>挑選方式：</strong>需親自研究個別食材（如單買台積電、蘋果），費時費力。</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <span class="text-red-500 font-bold">▪</span>
+                                <span><strong>風險集中：</strong>若該食材不新鮮（公司業績惡化），整體一餐直接砸鍋（虧損嚴重）。</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <span class="text-red-500 font-bold">▪</span>
+                                <span><strong>難易度：</strong>需要深度產業知識與基本面研究門檻。</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-teal-50/60 p-6 rounded-2xl border border-teal-200 space-y-4">
+                        <div class="flex items-center space-x-3 text-teal-700">
+                            <div class="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-bowl-food"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-navy-800">買 ETF ＝ 綜合海鮮大燴麵</h3>
+                        </div>
+                        <ul class="space-y-3 text-sm text-slate-600">
+                            <li class="flex items-start space-x-2">
+                                <span class="text-teal-600 font-bold">▪</span>
+                                <span><strong>挑選方式：</strong>主廚（投信公司）依特定公開配方（指數規則）打包搭配好好料。</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <span class="text-teal-600 font-bold">▪</span>
+                                <span><strong>風險分散：</strong>裡面有蝦子、蛤蜊、魚片，單一食材稍差不影響整碗麵的美味。</span>
+                            </li>
+                            <li class="flex items-start space-x-2">
+                                <span class="text-teal-600 font-bold">▪</span>
+                                <span><strong>難易度：</strong>了解整體配方邏輯（大盤/高股息/主題）即可輕鬆入手。</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Four Core Benefits Grid -->
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-stone-200 custom-shadow space-y-2 hover:border-teal-500 transition">
+                    <div class="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg mb-3">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h4 class="font-bold text-navy-800 text-base">1. 分散風險</h4>
+                    <p class="text-xs text-slate-600 leading-relaxed">一次涵蓋數十至數百檔成分股，避免單一公司踩雷倒閉或業績暴跌帶來的毀滅性重創。</p>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-stone-200 custom-shadow space-y-2 hover:border-teal-500 transition">
+                    <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg mb-3">
+                        <i class="fa-solid fa-bolt"></i>
+                    </div>
+                    <h4 class="font-bold text-navy-800 text-base">2. 交易便利</h4>
+                    <p class="text-xs text-slate-600 leading-relaxed">如同買賣一般股票，盤中開盤時間隨時可透過券商 App 按即時股價下單買賣。</p>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-stone-200 custom-shadow space-y-2 hover:border-teal-500 transition">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg mb-3">
+                        <i class="fa-solid fa-coins"></i>
+                    </div>
+                    <h4 class="font-bold text-navy-800 text-base">3. 低廉成本</h4>
+                    <p class="text-xs text-slate-600 leading-relaxed">被動追蹤指數不需頻繁高薪聘請經理人換股，內扣管理費遠低於傳統主動型基金。</p>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-stone-200 custom-shadow space-y-2 hover:border-teal-500 transition">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg mb-3">
+                        <i class="fa-solid fa-eye"></i>
+                    </div>
+                    <h4 class="font-bold text-navy-800 text-base">4. 高透明度</h4>
+                    <p class="text-xs text-slate-600 leading-relaxed">發行公司每日均公開披露持股明細與權重，投資人能清楚掌握每一分錢的投向。</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: 三大投資工具全方位 PK -->
+        <section id="compare" class="space-y-6">
+            <div class="border-l-4 border-teal-600 pl-4">
+                <h2 class="text-2xl sm:text-3xl font-black text-navy-800">2. 投資工具大比拚：股票 vs ETF vs 傳統基金</h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">透過多維度比較與視覺化雷達圖，全方位剖析三者的特性差異與適用場景。</p>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-6 items-center">
+                <!-- Radar Chart Container -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-4">
+                    <h3 class="text-lg font-bold text-navy-800 text-center">五大維度能力值雷達圖</h3>
+                    <p class="text-xs text-slate-500 text-center">動態對比三種工具在不同優勢面向的相對強度</p>
+                    <div class="chart-container">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Comparison Table & Detailed Matrix -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-4">
+                    <h3 class="text-lg font-bold text-navy-800">核心項目詳細對照表</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-stone-100 text-navy-800 border-b border-stone-200">
+                                    <th class="p-3 font-bold">比較項目</th>
+                                    <th class="p-3 font-bold text-blue-700">一般股票</th>
+                                    <th class="p-3 font-bold text-teal-700">ETF (指數型基金)</th>
+                                    <th class="p-3 font-bold text-purple-700">傳統共同基金</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-200 text-slate-600">
+                                <tr class="hover:bg-sand-50 transition">
+                                    <td class="p-3 font-semibold text-slate-800">標的範疇</td>
+                                    <td class="p-3">單一公司股票</td>
+                                    <td class="p-3 bg-teal-50/50 font-medium text-teal-800">一籃子標的（股/債/商品）</td>
+                                    <td class="p-3">一籃子標的</td>
+                                </tr>
+                                <tr class="hover:bg-sand-50 transition">
+                                    <td class="p-3 font-semibold text-slate-800">交易管道與時段</td>
+                                    <td class="p-3">證券交易所 / 盤中即時</td>
+                                    <td class="p-3 bg-teal-50/50 font-medium text-teal-800">證券交易所 / 盤中即時</td>
+                                    <td class="p-3">銀行、基金平台 / 每日收盤單一淨值</td>
+                                </tr>
+                                <tr class="hover:bg-sand-50 transition">
+                                    <td class="p-3 font-semibold text-slate-800">風險程度</td>
+                                    <td class="p-3 text-red-600 font-medium">較高 (個股營運風險)</td>
+                                    <td class="p-3 bg-teal-50/50 font-medium text-teal-800">中至低 (多檔成分股分散)</td>
+                                    <td class="p-3">中至低 (多檔標的分散)</td>
+                                </tr>
+                                <tr class="hover:bg-sand-50 transition">
+                                    <td class="p-3 font-semibold text-slate-800">管理方式</td>
+                                    <td class="p-3">投資人自行研究操作</td>
+                                    <td class="p-3 bg-teal-50/50 font-medium text-teal-800">被動追蹤指數為主</td>
+                                    <td class="p-3">主動由基金經理人選股操作</td>
+                                </tr>
+                                <tr class="hover:bg-sand-50 transition">
+                                    <td class="p-3 font-semibold text-slate-800">內扣費用(年)</td>
+                                    <td class="p-3 font-bold text-emerald-600">無經理費</td>
+                                    <td class="p-3 bg-teal-50/50 font-bold text-teal-800">較低 (約 0.1% ~ 1%)</td>
+                                    <td class="p-3 text-amber-700 font-medium">較高 (約 1.5% ~ 2.5%)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: 五大常見 ETF 類型與資產配置範例 -->
+        <section id="types" class="space-y-6">
+            <div class="border-l-4 border-teal-600 pl-4">
+                <h2 class="text-2xl sm:text-3xl font-black text-navy-800">3. 常見 ETF 類型與個人化資產配置</h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">點擊不同 ETF 類型探索追蹤邏輯與代表標的，並查看常見的股債組合提案。</p>
+            </div>
+
+            <!-- ETF Types Dynamic Filter / Selector -->
+            <div class="bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-6">
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="selectEtfType('market')" id="btn-type-market" class="etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 text-white transition">
+                        <i class="fa-solid fa-chart-line mr-1"></i> 市值型 (大盤型)
+                    </button>
+                    <button onclick="selectEtfType('dividend')" id="btn-type-dividend" class="etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-stone-100 text-slate-600 hover:bg-stone-200 transition">
+                        <i class="fa-solid fa-hand-holding-dollar mr-1"></i> 高股息型
+                    </button>
+                    <button onclick="selectEtfType('sector')" id="btn-type-sector" class="etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-stone-100 text-slate-600 hover:bg-stone-200 transition">
+                        <i class="fa-solid fa-microchip mr-1"></i> 產業 / 主題型
+                    </button>
+                    <button onclick="selectEtfType('bond')" id="btn-type-bond" class="etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-stone-100 text-slate-600 hover:bg-stone-200 transition">
+                        <i class="fa-solid fa-landmark mr-1"></i> 債券型
+                    </button>
+                    <button onclick="selectEtfType('leverage')" id="btn-type-leverage" class="etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-stone-100 text-slate-600 hover:bg-stone-200 transition">
+                        <i class="fa-solid fa-arrow-trend-up mr-1"></i> 商品與槓桿/反向型
+                    </button>
+                </div>
+
+                <!-- Type Detail Display Panel -->
+                <div id="type-detail-card" class="bg-sand-50 p-6 rounded-xl border border-sand-200 space-y-4">
+                    <!-- Dynamic Javascript Content Populated Here -->
+                </div>
+            </div>
+
+            <!-- Asset Allocation Suggestion with Donut Chart -->
+            <div class="bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200 pb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-navy-800">資產配置模擬提案</h3>
+                        <p class="text-xs text-slate-500">選擇您的投資風險屬性，查看股債搭配範例</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="updateAllocation('conservative')" id="alloc-btn-conservative" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-stone-100 text-slate-600 hover:bg-stone-200">保守型</button>
+                        <button onclick="updateAllocation('balanced')" id="alloc-btn-balanced" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white">穩健型 (推薦)</button>
+                        <button onclick="updateAllocation('aggressive')" id="alloc-btn-aggressive" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-stone-100 text-slate-600 hover:bg-stone-200">積極型</button>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-12 gap-6 items-center">
+                    <div class="md:col-span-5">
+                        <div class="chart-container">
+                            <canvas id="allocationChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="md:col-span-7 space-y-4">
+                        <div id="allocation-desc" class="space-y-3">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: 智慧計算機與關鍵指標診斷 -->
+        <section id="calculator" class="space-y-6">
+            <div class="border-l-4 border-teal-600 pl-4">
+                <h2 class="text-2xl sm:text-3xl font-black text-navy-800">4. 智慧計算機：內扣費用複利試算 & 折溢價診斷器</h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">透過實際數據演算，體驗內扣費用對長期資產的巨大影響，以及學會避免買貴的折溢價判斷。</p>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-8">
+                <!-- Calculator 1: Expense Ratio Compound Savings -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-6">
+                    <div class="flex items-center space-x-2 border-b border-stone-200 pb-3">
+                        <i class="fa-solid fa-piggy-bank text-amber-500 text-xl"></i>
+                        <h3 class="text-lg font-bold text-navy-800">內扣費用長期複利省錢計算機</h3>
+                    </div>
+
+                    <!-- Inputs Controls -->
+                    <div class="grid sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">初始投資金額 (新台幣元)</label>
+                            <input type="number" id="calc-principal" value="1000000" step="100000" oninput="calculateFees()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">年化預估總報酬率 (%)</label>
+                            <input type="number" id="calc-return" value="7" step="0.5" oninput="calculateFees()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ETF 預估總費用率 (年 %)</label>
+                            <input type="number" id="calc-etf-fee" value="0.35" step="0.05" oninput="calculateFees()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">傳統基金總費用率 (年 %)</label>
+                            <input type="number" id="calc-fund-fee" value="2.0" step="0.1" oninput="calculateFees()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-700">投資時間長度：<span id="years-display" class="text-teal-700 font-extrabold text-sm">20 年</span></label>
+                        </div>
+                        <input type="range" id="calc-years" min="5" max="30" value="20" oninput="calculateFees()" class="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-teal-600">
+                    </div>
+
+                    <!-- Outcome Display Highlight -->
+                    <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-bold text-amber-800">選用低內扣費用 ETF 可多省下：</div>
+                            <div id="savings-amount" class="text-2xl font-black text-amber-600">NT$ 0</div>
+                        </div>
+                        <div class="text-right text-xs text-slate-500">
+                            試算基於複利滾存效應
+                        </div>
+                    </div>
+
+                    <!-- Line Chart -->
+                    <div class="chart-container">
+                        <canvas id="feeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Calculator 2: Discount & Premium Checker -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-2xl border border-stone-200 custom-shadow space-y-6 flex flex-col justify-between">
+                    <div class="space-y-6">
+                        <div class="flex items-center space-x-2 border-b border-stone-200 pb-3">
+                            <i class="fa-solid fa-scale-balanced text-teal-600 text-xl"></i>
+                            <h3 class="text-lg font-bold text-navy-800">折價 / 溢價即時診斷器</h3>
+                        </div>
+
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            ETF 有「市價（交易所買賣價格）」與「淨值（真實資產總價值）」。當市價高於淨值為<strong>溢價</strong>（買貴），市價低於淨值為<strong>折價</strong>（買便宜）。
+                        </p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">輸入 ETF 當前交易所市價 (NT$)</label>
+                                <input type="number" id="input-market-price" value="20.50" step="0.05" oninput="checkNavStatus()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">輸入投信官網公布淨值 NAV (NT$)</label>
+                                <input type="number" id="input-nav-price" value="20.00" step="0.05" oninput="checkNavStatus()" class="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-teal-600">
+                            </div>
+                        </div>
+
+                        <!-- Result Alert Box -->
+                        <div id="nav-result-box" class="p-5 rounded-xl border transition space-y-2">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Risk Tips Footer -->
+                    <div class="bg-sand-50 p-4 rounded-xl border border-sand-200 space-y-2">
+                        <div class="font-bold text-xs text-navy-800 flex items-center space-x-1">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                            <span>關鍵避險提醒</span>
+                        </div>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            熱門新上市或受追捧的主題型 ETF 易出現大幅溢價（例如 > 1%）。此時追高買進，當價格回歸淨值時將產生無謂虧損。下單前務必確認折溢價！
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: ETF 智慧選型微測驗 -->
+        <section id="quiz" class="space-y-6">
+            <div class="border-l-4 border-teal-600 pl-4">
+                <h2 class="text-2xl sm:text-3xl font-black text-navy-800">5. 實戰小測驗：找出最適合您的 ETF 策略</h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">回答 3 個簡單問題，系統將為您推薦最契合的 ETF 類型與入門指引。</p>
+            </div>
+
+            <div class="bg-white p-6 sm:p-8 rounded-2xl border border-stone-200 custom-shadow max-w-3xl mx-auto space-y-6">
+                <!-- Quiz Steps Container -->
+                <div id="quiz-container" class="space-y-6">
+                    <!-- Dynamic Question Step Inject Here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer Section -->
+    <footer class="bg-navy-900 text-slate-400 text-xs py-8 border-t border-navy-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
+            <p class="text-slate-300 font-semibold">ETF 指數型股票基金速查與總覽指南</p>
+            <p>本平台內容僅供教學與概念展示用途，不構成任何具體投資建議或申購推薦。投資均有風險，投資人應獨立評估。</p>
+            <p class="text-slate-500">© 2026 ETF Interactive Guide. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Global State & Data Store
+        const etfTypesData = {
+            market: {
+                title: "市值型 (大盤型) ETF",
+                strategy: "追蹤市場中市值最大、最具代表性的龍頭企業（如前50大企業）",
+                examples: "台股 0050、006208；美股 VOO、SPY、QQQ",
+                target: "適合追求貼近整體經濟大盤長期成長、願意長期持有的投資人",
+                badge: "大盤同步",
+                accent: "bg-teal-600"
+            },
+            dividend: {
+                title: "高股息型 ETF",
+                strategy: "篩選預估股息殖利率高、歷史配息穩定、財務健全的企業",
+                examples: "台股 0056、00878、00919；美股 VYM、SCHD",
+                target: "適合喜愛定期獲得穩定現金流、退休族或重視配息收益者",
+                badge: "現金流導向",
+                accent: "bg-amber-600"
+            },
+            sector: {
+                title: "產業 / 主題型 ETF",
+                strategy: "聚焦於特定前瞻熱門產業（如半導體、AI、電動車、生技）",
+                examples: "美股 SOXX (半導體)、SMH、IGV (軟體)；台股 00891",
+                target: "適合對特定產業趨勢有深度研究、看好極致 explosive 成長力道者",
+                badge: "高成長潛力",
+                accent: "bg-purple-600"
+            },
+            bond: {
+                title: "債券型 ETF",
+                strategy: "買入各國政府公債（如美國20年期公債）或高評級投資級公司債",
+                examples: "美股 TLT、BND、AGG；台股 00679B、00720B",
+                target: "適合尋求資產配置避險、降波動、穩定領息的資產保護者",
+                badge: "避險降波動",
+                accent: "bg-emerald-600"
+            },
+            leverage: {
+                title: "商品與槓桿 / 反向型 ETF",
+                strategy: "追蹤黃金、原油實物價格，或運用期貨提供 2 倍槓桿或反向 1 倍機制",
+                examples: "美股 GLD (黃金)、USO (原油)；台股 元大S&P原油、00632R (反1)",
+                target: "適合具備專業交易經驗、進行短期避險或波段操作的資深交易者",
+                badge: "波段工具",
+                accent: "bg-red-600"
+            }
+        };
+
+        const allocationsData = {
+            conservative: {
+                label: "保守型配置 (30% 股票 / 70% 債券)",
+                desc: "以高評級債券型 ETF 為主體，大幅降低股市波動帶來的資產起伏，適合接近退休或極度避險族群。",
+                data: [20, 10, 70]
+            },
+            balanced: {
+                label: "穩健型配置 (60% 股票 / 40% 債券)",
+                desc: "經典的 60/40 股債黃金搭配，兼具市值型 ETF 的資本增值潛力與債券 ETF 的抗跌避險屬性，最推薦一般投資人。",
+                data: [40, 20, 40]
+            },
+            aggressive: {
+                label: "積極型配置 (80% 股票 / 20% 債券)",
+                desc: "以市值型與主題型 ETF 為核心，極大化長期複利報酬成長，適合年輕、距離退休仍遠且能承受中高波動者。",
+                data: [60, 20, 20]
+            }
+        };
+
+        // Chart instances
+        let radarChartInstance = null;
+        let allocationChartInstance = null;
+        let feeChartInstance = null;
+
+        // Initialize Application Page
+        document.addEventListener('DOMContentLoaded', () => {
+            initRadarChart();
+            initAllocationChart();
+            initFeeChart();
+            selectEtfType('market');
+            updateAllocation('balanced');
+            calculateFees();
+            checkNavStatus();
+            initQuiz();
+        });
+
+        // Smooth Scroll
+        function scrollToSection(sectionId) {
+            const el = document.getElementById(sectionId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Section 1 Tab Switcher
+        function switchConceptTab(tabName) {
+            const defTab = document.getElementById('concept-tab-definition');
+            const anaTab = document.getElementById('concept-tab-analogy');
+            const btnDef = document.getElementById('tab-btn-definition');
+            const btnAna = document.getElementById('tab-btn-analogy');
+
+            if (tabName === 'definition') {
+                defTab.classList.remove('hidden');
+                anaTab.classList.add('hidden');
+                btnDef.className = "px-4 py-2 rounded-xl font-bold text-sm bg-teal-600 text-white transition shadow-sm";
+                btnAna.className = "px-4 py-2 rounded-xl font-bold text-sm bg-stone-100 text-slate-600 hover:bg-stone-200 transition";
+            } else {
+                defTab.classList.add('hidden');
+                anaTab.classList.remove('hidden');
+                btnAna.className = "px-4 py-2 rounded-xl font-bold text-sm bg-teal-600 text-white transition shadow-sm";
+                btnDef.className = "px-4 py-2 rounded-xl font-bold text-sm bg-stone-100 text-slate-600 hover:bg-stone-200 transition";
+            }
+        }
+
+        // Radar Chart Initialization
+        function initRadarChart() {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['交易便利度', '分散風險度', '成本優勢', '管理透明度', '潛在爆發報酬'],
+                    datasets: [
+                        {
+                            label: '一般股票',
+                            data: [95, 20, 95, 60, 95],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'ETF (指數型基金)',
+                            data: [90, 85, 85, 95, 75],
+                            borderColor: '#0284c7',
+                            backgroundColor: 'rgba(2, 132, 199, 0.25)',
+                            borderWidth: 3
+                        },
+                        {
+                            label: '傳統共同基金',
+                            data: [50, 85, 30, 65, 70],
+                            borderColor: '#9333ea',
+                            backgroundColor: 'rgba(147, 51, 234, 0.15)',
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            min: 0,
+                            max: 100,
+                            ticks: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { font: { family: 'Noto Sans TC', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Section 3: Select ETF Type Panel Update
+        function selectEtfType(typeKey) {
+            const data = etfTypesData[typeKey];
+            const detailCard = document.getElementById('type-detail-card');
+
+            // Reset buttons style
+            document.querySelectorAll('.etf-type-btn').forEach(btn => {
+                btn.className = "etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-stone-100 text-slate-600 hover:bg-stone-200 transition";
+            });
+
+            const activeBtn = document.getElementById(`btn-type-${typeKey}`);
+            if (activeBtn) {
+                activeBtn.className = "etf-type-btn px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 text-white transition";
+            }
+
+            detailCard.innerHTML = `
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 pb-3">
+                    <h3 class="text-xl font-black text-navy-800">${data.title}</h3>
+                    <span class="text-xs text-white font-bold px-3 py-1 rounded-full ${data.accent}">${data.badge}</span>
+                </div>
+                <div class="grid md:grid-cols-3 gap-4 text-sm">
+                    <div class="space-y-1">
+                        <div class="font-bold text-xs text-slate-500">投資策略與選股邏輯</div>
+                        <div class="text-slate-800 font-medium">${data.strategy}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="font-bold text-xs text-slate-500">代表性熱門範例標的</div>
+                        <div class="text-teal-700 font-bold">${data.examples}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="font-bold text-xs text-slate-500">最適合的投資對象</div>
+                        <div class="text-slate-800 font-medium">${data.target}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Section 3: Allocation Donut Chart Initialization
+        function initAllocationChart() {
+            const ctx = document.getElementById('allocationChart').getContext('2d');
+            allocationChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['市值型 ETF', '高股息/主題 ETF', '債券型 ETF'],
+                    datasets: [{
+                        data: [40, 20, 40],
+                        backgroundColor: ['#0284c7', '#f59e0b', '#10b981'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { family: 'Noto Sans TC', size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function updateAllocation(profileKey) {
+            const profile = allocationsData[profileKey];
+            
+            // Button states
+            ['conservative', 'balanced', 'aggressive'].forEach(key => {
+                const btn = document.getElementById(`alloc-btn-${key}`);
+                if (key === profileKey) {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white";
+                } else {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-stone-100 text-slate-600 hover:bg-stone-200";
+                }
+            });
+
+            // Update Chart
+            allocationChartInstance.data.datasets[0].data = profile.data;
+            allocationChartInstance.update();
+
+            // Update Description
+            document.getElementById('allocation-desc').innerHTML = `
+                <div class="font-black text-navy-800 text-lg">${profile.label}</div>
+                <p class="text-sm text-slate-600 leading-relaxed">${profile.desc}</p>
+            `;
+        }
+
+        // Section 4: Expense Ratio Calculator logic
+        function initFeeChart() {
+            const ctx = document.getElementById('feeChart').getContext('2d');
+            feeChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: '選用低成本 ETF 累積資產',
+                            data: [],
+                            borderColor: '#0284c7',
+                            backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: '傳統高費用基金累積資產',
+                            data: [],
+                            borderColor: '#d97706',
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { family: 'Noto Sans TC', size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': NT$ ' + Math.round(context.raw).toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) { return '$' + (value / 10000).toFixed(0) + '萬'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function calculateFees() {
+            const principal = parseFloat(document.getElementById('calc-principal').value) || 0;
+            const rate = (parseFloat(document.getElementById('calc-return').value) || 0) / 100;
+            const etfFee = (parseFloat(document.getElementById('calc-etf-fee').value) || 0) / 100;
+            const fundFee = (parseFloat(document.getElementById('calc-fund-fee').value) || 0) / 100;
+            const years = parseInt(document.getElementById('calc-years').value) || 20;
+
+            document.getElementById('years-display').innerText = years + " 年";
+
+            const labels = [];
+            const etfData = [];
+            const fundData = [];
+
+            let etfVal = principal;
+            let fundVal = principal;
+
+            const netEtfRate = rate - etfFee;
+            const netFundRate = rate - fundFee;
+
+            for (let i = 0; i <= years; i++) {
+                labels.push(`第 ${i} 年`);
+                if (i === 0) {
+                    etfData.push(principal);
+                    fundData.push(principal);
+                } else {
+                    etfVal = etfVal * (1 + netEtfRate);
+                    fundVal = fundVal * (1 + netFundRate);
+                    etfData.push(etfVal);
+                    fundData.push(fundVal);
+                }
+            }
+
+            const diff = etfVal - fundVal;
+            document.getElementById('savings-amount').innerText = 'NT$ ' + Math.round(diff).toLocaleString();
+
+            feeChartInstance.data.labels = labels;
+            feeChartInstance.data.datasets[0].data = etfData;
+            feeChartInstance.data.datasets[1].data = fundData;
+            feeChartInstance.update();
+        }
+
+        // Section 4: Discount / Premium NAV Checker
+        function checkNavStatus() {
+            const marketPrice = parseFloat(document.getElementById('input-market-price').value) || 0;
+            const navPrice = parseFloat(document.getElementById('input-nav-price').value) || 0;
+            const box = document.getElementById('nav-result-box');
+
+            if (navPrice <= 0 || marketPrice <= 0) {
+                box.className = "p-4 rounded-xl bg-stone-100 border border-stone-300 text-xs text-slate-500";
+                box.innerHTML = "請輸入有效的價格數值。";
+                return;
+            }
+
+            const diffPct = ((marketPrice - navPrice) / navPrice) * 100;
+            const absPct = Math.abs(diffPct).toFixed(2);
+
+            if (diffPct > 0.5) {
+                // 溢價高 (買貴)
+                box.className = "p-5 rounded-xl bg-red-50 border border-red-200 text-red-900 space-y-2";
+                box.innerHTML = `
+                    <div class="flex items-center space-x-2 font-black text-red-700 text-sm">
+                        <i class="fa-solid fa-arrow-trend-up"></i>
+                        <span>當前呈現「溢價」幅度：+${absPct}% （市價高於淨值）</span>
+                    </div>
+                    <p class="text-xs leading-relaxed text-red-800">
+                        <strong>操作建議：</strong>市價已被買貴！若大幅溢價（> 1%），建議暫緩追高買進，等待價格套利回歸合理淨值範圍，避免無謂承擔高溢價回落的損失。
+                    </p>
+                `;
+            } else if (diffPct < -0.5) {
+                // 折價 (便宜)
+                box.className = "p-5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2";
+                box.innerHTML = `
+                    <div class="flex items-center space-x-2 font-black text-emerald-700 text-sm">
+                        <i class="fa-solid fa-arrow-trend-down"></i>
+                        <span>當前呈現「折價」幅度：-${absPct}% （市價低於淨值）</span>
+                    </div>
+                    <p class="text-xs leading-relaxed text-emerald-800">
+                        <strong>操作建議：</strong>目前市價相對低於實際資產淨值，代表有折價折讓空間，屬相對合理或便宜申購範圍。
+                    </p>
+                `;
+            } else {
+                // 貼近淨值
+                box.className = "p-5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 space-y-2";
+                box.innerHTML = `
+                    <div class="flex items-center space-x-2 font-black text-teal-700 text-sm">
+                        <i class="fa-solid fa-check-circle"></i>
+                        <span>價格合理平穩 (折溢價幅度僅 ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(2)}%)</span>
+                    </div>
+                    <p class="text-xs leading-relaxed text-teal-800">
+                        <strong>操作建議：</strong>市價與淨值走勢高度一致，造市良好，可依正常投資計畫進行下單交易。
+                    </p>
+                `;
+            }
+        }
+
+        // Section 5: Quiz Interactive Flow
+        const quizQuestions = [
+            {
+                q: "1. 您最重視的投資目標是什麼？",
+                options: [
+                    { text: "追求跟隨整體經濟大盤成長，長期資本增值", result: "market" },
+                    { text: "希望定期獲得穩定股息現金流，入袋為安", result: "dividend" },
+                    { text: "極看好特定科技/AI產業，追求爆發力", result: "sector" },
+                    { text: "降低股市波動，追求穩健避險領息", result: "bond" }
+                ]
+            }
+        ];
+
+        let currentQuizIndex = 0;
+
+        function initQuiz() {
+            renderQuizStep(0);
+        }
+
+        function renderQuizStep(stepIdx) {
+            const container = document.getElementById('quiz-container');
+            const item = quizQuestions[stepIdx];
+
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div class="font-bold text-lg text-navy-800">${item.q}</div>
+                    <div class="grid gap-3">
+                        ${item.options.map((opt, idx) => `
+                            <button onclick="handleQuizAnswer('${opt.result}')" class="w-full text-left p-4 rounded-xl border border-stone-200 hover:border-teal-500 hover:bg-teal-50/50 font-medium text-sm text-slate-700 transition flex justify-between items-center">
+                                <span>${opt.text}</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleQuizAnswer(typeKey) {
+            const container = document.getElementById('quiz-container');
+            const res = etfTypesData[typeKey];
+
+            container.innerHTML = `
+                <div class="bg-sand-50 p-6 rounded-2xl border border-sand-200 space-y-4 text-center">
+                    <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-100 text-teal-700 text-xl font-bold">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    <h3 class="text-2xl font-black text-navy-800">最適合您的類型：${res.title}</h3>
+                    <p class="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">${res.strategy}</p>
+                    <div class="p-3 bg-white rounded-xl border border-stone-200 inline-block text-xs font-bold text-teal-700">
+                        推薦入門觀測標的：${res.examples}
+                    </div>
+                    <div class="pt-2">
+                        <button onclick="initQuiz()" class="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-slate-700 rounded-xl font-bold text-xs transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> 重新測試
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
